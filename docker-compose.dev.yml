@@ -1,0 +1,40 @@
+# Hot-reload overlay for local development.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Each service mounts its source directory and runs uvicorn with --reload.
+# Code changes are picked up instantly without rebuilding the image.
+
+version: "3.9"
+
+services:
+  user-service:
+    build:
+      context: ./user-service
+      target: builder          # reuse builder stage so deps are already installed
+    volumes:
+      - ./user-service:/app    # live-mount source
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+  post-service:
+    build:
+      context: ./post-service
+      target: builder
+    volumes:
+      - ./post-service:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+
+  comment-service:
+    build:
+      context: ./comment-service
+      target: builder
+    volumes:
+      - ./comment-service:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8003 --reload
+
+  notification-service:
+    build:
+      context: ./notification-service
+      target: builder
+    volumes:
+      - ./notification-service:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8004 --reload

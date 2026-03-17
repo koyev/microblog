@@ -1,0 +1,61 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build all images
+        run: docker compose build
+
+      - name: Start services
+        run: docker compose up -d --wait
+
+      - name: Health check - user-service
+        run: |
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/health)
+            [ "$STATUS" = "200" ] && echo "user-service healthy" && break
+            echo "Waiting... ($i)"
+            sleep 5
+          done
+          [ "$STATUS" = "200" ] || (echo "user-service failed health check" && exit 1)
+
+      - name: Health check - post-service
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8002/health)
+          [ "$STATUS" = "200" ] || (echo "post-service failed health check" && exit 1)
+
+      - name: Health check - comment-service
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8003/health)
+          [ "$STATUS" = "200" ] || (echo "comment-service failed health check" && exit 1)
+
+      - name: Health check - notification-service
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8004/health)
+          [ "$STATUS" = "200" ] || (echo "notification-service failed health check" && exit 1)
+
+      - name: Health check - API Gateway
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
+          [ "$STATUS" = "200" ] || (echo "api-gateway failed health check" && exit 1)
+
+      - name: Run E2E smoke tests
+        run: |
+          pip install httpx pytest pytest-timeout
+          pytest e2e-tests/ -v --timeout=30
+
+      - name: Tear down on failure
+        if: failure()
+        run: docker compose logs && docker compose down
