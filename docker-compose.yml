@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # ── Databases ──────────────────────────────────────────────────────────────
   user-db:
@@ -133,6 +131,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ── Frontend ────────────────────────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - api-gateway
 
   # ── API Gateway ─────────────────────────────────────────────────────────────
   api-gateway:

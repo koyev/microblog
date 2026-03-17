@@ -1,15 +1,18 @@
 import os
+from contextlib import asynccontextmanager
+
 import structlog
 from fastapi import FastAPI
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.orm import declarative_base, sessionmaker
-from prometheus_fastapi_instrumentator import Instrumentator
+from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from prometheus_fastapi_instrumentator import Instrumentator
+from pydantic import BaseModel
+from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 structlog.configure(
     processors=[structlog.processors.JSONRenderer()],
@@ -17,7 +20,9 @@ structlog.configure(
 )
 log = structlog.get_logger()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@comment-db:5432/commentdb")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://user:password@comment-db:5432/commentdb"
+)
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
@@ -30,8 +35,6 @@ class Comment(Base):
     text = Column(String, nullable=False)
 
 
-Base.metadata.create_all(bind=engine)
-
 provider = TracerProvider()
 otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://jaeger:4317")
 processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True))
@@ -39,7 +42,21 @@ provider.add_span_processor(processor)
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer("comment-service")
 
-app = FastAPI(title="Comment Service")
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    log.info("db_initialized", service="comment-service")
+    yield
+
+
+app = FastAPI(title="Comment Service", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 FastAPIInstrumentor.instrument_app(app)
 Instrumentator().instrument(app).expose(app)
 

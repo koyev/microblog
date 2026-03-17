@@ -1,19 +1,20 @@
-import os
 import asyncio
-import structlog
+import os
 from contextlib import asynccontextmanager
+
+import aio_pika
+import structlog
 from fastapi import FastAPI
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.orm import declarative_base, sessionmaker
-from prometheus_fastapi_instrumentator import Instrumentator
+from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-import aio_pika
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from prometheus_fastapi_instrumentator import Instrumentator
 from rx import create
-from rx.scheduler.eventloop import AsyncIOScheduler
+from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 structlog.configure(
     processors=[structlog.processors.JSONRenderer()],
@@ -21,7 +22,9 @@ structlog.configure(
 )
 log = structlog.get_logger()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@notification-db:5432/notificationdb")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://user:password@notification-db:5432/notificationdb"
+)
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq/")
 
 engine = create_engine(DATABASE_URL)
@@ -34,8 +37,6 @@ class Notification(Base):
     id = Column(Integer, primary_key=True, index=True)
     message = Column(String, nullable=False)
 
-
-Base.metadata.create_all(bind=engine)
 
 provider = TracerProvider()
 otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://jaeger:4317")
@@ -56,15 +57,16 @@ def save_notification(message: str):
         db.close()
 
 
-def process_message_stream(messages: list[str]):
-    """Use RxPY to process a stream of messages reactively."""
+def process_message_stream(messages: list):
+    """Process a batch of messages reactively using RxPY."""
+
     def subscribe(observer, scheduler=None):
         for msg in messages:
             observer.on_next(msg)
         observer.on_completed()
 
     source = create(subscribe)
-    source.pipe().subscribe(
+    source.subscribe(
         on_next=lambda msg: log.info("rx_processing", message=msg[:50]),
         on_error=lambda e: log.error("rx_error", error=str(e)),
         on_completed=lambda: log.info("rx_stream_completed"),
@@ -76,8 +78,8 @@ async def consume_rabbitmq():
         try:
             connection = await aio_pika.connect_robust(RABBITMQ_URL)
             break
-        except Exception as e:
-            log.warning("rabbitmq_connecting", attempt=attempt, error=str(e))
+        except Exception as exc:
+            log.warning("rabbitmq_connecting", attempt=attempt, error=str(exc))
             await asyncio.sleep(3)
     else:
         log.error("rabbitmq_connection_failed")
@@ -97,12 +99,20 @@ async def consume_rabbitmq():
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(application: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    log.info("db_initialized", service="notification-service")
     asyncio.create_task(consume_rabbitmq())
     yield
 
 
 app = FastAPI(title="Notification Service", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 FastAPIInstrumentor.instrument_app(app)
 Instrumentator().instrument(app).expose(app)
 
