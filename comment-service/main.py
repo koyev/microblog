@@ -20,9 +20,7 @@ structlog.configure(
 )
 log = structlog.get_logger()
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://user:password@comment-db:5432/commentdb"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@comment-db:5432/commentdb")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)

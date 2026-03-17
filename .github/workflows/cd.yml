@@ -67,13 +67,13 @@ jobs:
           for svc_port in "user-service:8001" "post-service:8002" "comment-service:8003" "notification-service:8004" "api-gateway:8080"; do
             svc="${svc_port%%:*}"
             port="${svc_port##*:}"
-            for i in $(seq 1 10); do
-              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}/health)
-              [ "$STATUS" = "200" ] && echo "${svc} healthy" && break
-              echo "Waiting for ${svc}... ($i)"
-              sleep 5
+            ok=0
+            for i in $(seq 1 12); do
+              STATUS=$(python3 -c "import urllib.request,sys; r=urllib.request.urlopen('http://localhost:${port}/health',timeout=3); sys.exit(0 if r.status==200 else 1)" 2>/dev/null && echo "200" || echo "fail")
+              if [ "$STATUS" = "200" ]; then echo "${svc} healthy"; ok=1; break; fi
+              echo "Waiting for ${svc}... ($i/12)"; sleep 5
             done
-            [ "$STATUS" = "200" ] || (echo "${svc} failed health check" && docker compose logs ${svc} && exit 1)
+            [ "$ok" = "1" ] || (echo "${svc} failed health check" && docker compose logs ${svc} && exit 1)
           done
 
       - name: Run E2E smoke tests
