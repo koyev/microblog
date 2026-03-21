@@ -1,18 +1,20 @@
-import os
 import asyncio
-import structlog
+import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.orm import declarative_base, sessionmaker
-from prometheus_fastapi_instrumentator import Instrumentator
+
+import aio_pika
+import structlog
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-import aio_pika
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from prometheus_fastapi_instrumentator import Instrumentator
+from pydantic import BaseModel
+from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 structlog.configure(
     processors=[structlog.processors.JSONRenderer()],
@@ -34,8 +36,6 @@ class Post(Base):
     content = Column(String, nullable=False)
 
 
-Base.metadata.create_all(bind=engine)
-
 provider = TracerProvider()
 otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://jaeger:4317")
 processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True))
@@ -56,14 +56,16 @@ async def get_rabbitmq_channel():
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(application: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    log.info("db_initialized", service="post-service")
     for attempt in range(10):
         try:
             await get_rabbitmq_channel()
             log.info("rabbitmq_connected")
             break
-        except Exception as e:
-            log.warning("rabbitmq_connecting", attempt=attempt, error=str(e))
+        except Exception as exc:
+            log.warning("rabbitmq_connecting", attempt=attempt, error=str(exc))
             await asyncio.sleep(3)
     yield
     if _rabbitmq_connection:
@@ -71,6 +73,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Post Service", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 FastAPIInstrumentor.instrument_app(app)
 Instrumentator().instrument(app).expose(app)
 
@@ -117,8 +125,8 @@ async def create_post(body: PostCreate):
                     routing_key="post.created",
                 )
                 log.info("post_event_published", post_id=post.id)
-            except Exception as e:
-                log.warning("rabbitmq_publish_failed", error=str(e))
+            except Exception as exc:
+                log.warning("rabbitmq_publish_failed", error=str(exc))
 
             return {"id": post.id, "content": post.content}
         finally:

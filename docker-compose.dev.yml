@@ -4,8 +4,6 @@
 # Each service mounts its source directory and runs uvicorn with --reload.
 # Code changes are picked up instantly without rebuilding the image.
 
-version: "3.9"
-
 services:
   user-service:
     build:

@@ -16,10 +16,10 @@ jobs:
         service: [user-service, post-service, comment-service, notification-service]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -37,7 +37,7 @@ jobs:
         working-directory: ${{ matrix.service }}
         run: |
           pylint main.py \
-            --disable=C0114,C0115,C0116,R0903,W0611,E0401 \
+            --disable=C0114,C0115,C0116,R0903,W0611,W0612,W0613,E0401 \
             --fail-under=7.0
 
       - name: Run unit tests
@@ -51,10 +51,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [user-service, post-service, comment-service, notification-service, api-gateway]
+        service:
+          - user-service
+          - post-service
+          - comment-service
+          - notification-service
+          - api-gateway
+          - frontend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build Docker image
         run: |

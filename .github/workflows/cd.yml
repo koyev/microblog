@@ -4,16 +4,57 @@ on:
   push:
     branches: [main]
 
+env:
+  POSTGRES_USER: user
+  POSTGRES_PASSWORD: password
+  RABBITMQ_USER: guest
+  RABBITMQ_PASSWORD: guest
+  GRAFANA_ADMIN_PASSWORD: admin
+
 jobs:
   deploy:
     name: Deploy to production
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
+
+      - name: Create root .env
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=${POSTGRES_USER}
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          RABBITMQ_USER=${RABBITMQ_USER}
+          RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+          GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+          EOF
+
+      - name: Create per-service .env files
+        run: |
+          cat > user-service/.env <<EOF
+          DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@user-db:5432/userdb
+          OTLP_ENDPOINT=http://jaeger:4317
+          EOF
+
+          cat > post-service/.env <<EOF
+          DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@post-db:5432/postdb
+          RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+          OTLP_ENDPOINT=http://jaeger:4317
+          EOF
+
+          cat > comment-service/.env <<EOF
+          DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@comment-db:5432/commentdb
+          OTLP_ENDPOINT=http://jaeger:4317
+          EOF
+
+          cat > notification-service/.env <<EOF
+          DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@notification-db:5432/notificationdb
+          RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+          OTLP_ENDPOINT=http://jaeger:4317
+          EOF
 
       - name: Build all images
         run: docker compose build
@@ -21,41 +62,25 @@ jobs:
       - name: Start services
         run: docker compose up -d --wait
 
-      - name: Health check - user-service
+      - name: Health check - all services
         run: |
-          for i in $(seq 1 10); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/health)
-            [ "$STATUS" = "200" ] && echo "user-service healthy" && break
-            echo "Waiting... ($i)"
-            sleep 5
+          for svc_port in "user-service:8001" "post-service:8002" "comment-service:8003" "notification-service:8004" "api-gateway:8080"; do
+            svc="${svc_port%%:*}"
+            port="${svc_port##*:}"
+            ok=0
+            for i in $(seq 1 12); do
+              STATUS=$(python3 -c "import urllib.request,sys; r=urllib.request.urlopen('http://localhost:${port}/health',timeout=3); sys.exit(0 if r.status==200 else 1)" 2>/dev/null && echo "200" || echo "fail")
+              if [ "$STATUS" = "200" ]; then echo "${svc} healthy"; ok=1; break; fi
+              echo "Waiting for ${svc}... ($i/12)"; sleep 5
+            done
+            [ "$ok" = "1" ] || (echo "${svc} failed health check" && docker compose logs ${svc} && exit 1)
           done
-          [ "$STATUS" = "200" ] || (echo "user-service failed health check" && exit 1)
-
-      - name: Health check - post-service
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8002/health)
-          [ "$STATUS" = "200" ] || (echo "post-service failed health check" && exit 1)
-
-      - name: Health check - comment-service
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8003/health)
-          [ "$STATUS" = "200" ] || (echo "comment-service failed health check" && exit 1)
-
-      - name: Health check - notification-service
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8004/health)
-          [ "$STATUS" = "200" ] || (echo "notification-service failed health check" && exit 1)
-
-      - name: Health check - API Gateway
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
-          [ "$STATUS" = "200" ] || (echo "api-gateway failed health check" && exit 1)
 
       - name: Run E2E smoke tests
         run: |
           pip install httpx pytest pytest-timeout
           pytest e2e-tests/ -v --timeout=30
 
-      - name: Tear down on failure
-        if: failure()
-        run: docker compose logs && docker compose down
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
