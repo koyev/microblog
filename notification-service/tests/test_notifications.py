@@ -46,3 +46,22 @@ def test_save_notification():
         save_notification("test notification")
         mock_session.add.assert_called_once()
         mock_session.commit.assert_called_once()
+
+
+def test_stream_route_registered(client):
+    """SSE route /stream/notifications is registered in the app."""
+    from main import app
+
+    routes = [route.path for route in app.routes]
+    assert "/stream/notifications" in routes
+
+
+def test_broadcast_sse():
+    import asyncio
+    from main import _broadcast_sse, _sse_subscribers
+
+    queue = asyncio.Queue(maxsize=100)
+    _sse_subscribers.add(queue)
+    asyncio.run(_broadcast_sse("hello"))
+    assert queue.get_nowait() == "hello"
+    _sse_subscribers.discard(queue)
