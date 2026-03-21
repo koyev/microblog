@@ -161,7 +161,7 @@ async def stream_notifications(request: Request):
 
     async def event_generator():
         try:
-            yield "data: {\"connected\": true}\n\n"
+            yield 'data: {"connected": true}\n\n'
             while True:
                 if await request.is_disconnected():
                     break
