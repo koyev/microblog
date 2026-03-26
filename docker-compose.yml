@@ -145,6 +145,11 @@ services:
     build: ./api-gateway
     ports:
       - "8080:8080"
+    environment:
+      USER_SERVICE_HOST: user-service
+      POST_SERVICE_HOST: post-service
+      COMMENT_SERVICE_HOST: comment-service
+      NOTIFICATION_SERVICE_HOST: notification-service
     depends_on:
       - user-service
       - post-service
