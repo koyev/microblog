@@ -110,9 +110,9 @@ jobs:
           TAG: ${{ github.sha }}
         run: |
           for svc in api-gateway user-service post-service comment-service notification-service; do
-            docker build -t $REGISTRY/microblog-$svc:$TAG -t $REGISTRY/microblog-$svc:latest ./$svc
-            docker push $REGISTRY/microblog-$svc:$TAG
-            docker push $REGISTRY/microblog-$svc:latest
+            docker build -t $REGISTRY/microblog/$svc:$TAG -t $REGISTRY/microblog/$svc:latest ./$svc
+            docker push $REGISTRY/microblog/$svc:$TAG
+            docker push $REGISTRY/microblog/$svc:latest
           done
 
       - name: Register new task definitions and update ECS services
@@ -122,7 +122,7 @@ jobs:
           CLUSTER: microblog
         run: |
           for svc in api-gateway user-service post-service comment-service notification-service; do
-            IMAGE="$REGISTRY/microblog-$svc:$TAG"
+            IMAGE="$REGISTRY/microblog/$svc:$TAG"
 
             TASK_DEF=$(sed "s|IMAGE_PLACEHOLDER|$IMAGE|g" ecs/$svc.json)
 
