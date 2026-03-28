@@ -9,7 +9,6 @@ env:
   POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
   RABBITMQ_USER: ${{ secrets.RABBITMQ_USER }}
   RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
-  GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
 
 jobs:
   integration-tests:
@@ -29,7 +28,6 @@ jobs:
           POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
           RABBITMQ_USER=${RABBITMQ_USER}
           RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-          GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
           EOF
 
       - name: Create per-service .env files
