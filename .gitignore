@@ -2,6 +2,9 @@
 .env
 **/.env
 
+# ECS task definitions contain secrets — keep local only
+ecs/*.json
+
 # Python
 __pycache__/
 *.pyc
