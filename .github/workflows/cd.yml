@@ -115,70 +115,15 @@ jobs:
             docker push $REGISTRY/microblog/$svc:latest
           done
 
-      - name: Generate ECS task definitions from secrets
+      - name: Generate ECS task definitions
         env:
-          ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
           REGION: ${{ secrets.AWS_REGION }}
           RDS_ENDPOINT: ${{ secrets.RDS_ENDPOINT }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           RABBITMQ_URL: ${{ secrets.RABBITMQ_URL }}
-          OTLP_ENDPOINT: ${{ secrets.OTLP_ENDPOINT }}
-          OTEL_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
         run: |
-          mkdir -p ecs
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
-          cat > ecs/api-gateway.json <<EOF
-          {
-            "family": "microblog-api-gateway",
-            "networkMode": "awsvpc",
-            "requiresCompatibilities": ["FARGATE"],
-            "cpu": "256", "memory": "512",
-            "executionRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/ecsTaskExecutionRole",
-            "containerDefinitions": [{
-              "name": "api-gateway", "image": "IMAGE_PLACEHOLDER", "essential": true,
-              "portMappings": [{"name": "api-gateway", "containerPort": 8080, "protocol": "tcp", "appProtocol": "http"}],
-              "environment": [
-                {"name": "USER_SERVICE_HOST", "value": "user-service"},
-                {"name": "POST_SERVICE_HOST", "value": "post-service"},
-                {"name": "COMMENT_SERVICE_HOST", "value": "comment-service"},
-                {"name": "NOTIFICATION_SERVICE_HOST", "value": "notification-service"}
-              ],
-              "logConfiguration": {"logDriver": "awslogs", "options": {"awslogs-group": "/ecs/microblog-api-gateway", "awslogs-region": "${REGION}", "awslogs-stream-prefix": "ecs", "awslogs-create-group": "true"}}
-            }]
-          }
-          EOF
-
-          for svc in user-service post-service comment-service notification-service; do
-            PORT=$(case $svc in user-service) echo 8001;; post-service) echo 8002;; comment-service) echo 8003;; notification-service) echo 8004;; esac)
-            DB=$(case $svc in user-service) echo userdb;; post-service) echo postdb;; comment-service) echo commentdb;; notification-service) echo notificationdb;; esac)
-
-            MQ_ENV=""
-            if [ "$svc" = "post-service" ] || [ "$svc" = "notification-service" ]; then
-              MQ_ENV=', {"name": "RABBITMQ_URL", "value": "'"${RABBITMQ_URL}"'"}'
-            fi
-
-            cat > ecs/$svc.json <<EOF
-          {
-            "family": "microblog-${svc}",
-            "networkMode": "awsvpc",
-            "requiresCompatibilities": ["FARGATE"],
-            "cpu": "256", "memory": "512",
-            "executionRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/ecsTaskExecutionRole",
-            "containerDefinitions": [{
-              "name": "${svc}", "image": "IMAGE_PLACEHOLDER", "essential": true,
-              "portMappings": [{"name": "${svc}", "containerPort": ${PORT}, "protocol": "tcp", "appProtocol": "http"}],
-              "environment": [
-                {"name": "DATABASE_URL", "value": "postgresql://postgres:${DB_PASSWORD}@${RDS_ENDPOINT}:5432/${DB}?sslmode=require"},
-                {"name": "OTLP_ENDPOINT", "value": "${OTLP_ENDPOINT}"},
-                {"name": "OTEL_EXPORTER_OTLP_HEADERS", "value": "${OTEL_HEADERS}"}
-                ${MQ_ENV}
-              ],
-              "logConfiguration": {"logDriver": "awslogs", "options": {"awslogs-group": "/ecs/microblog-${svc}", "awslogs-region": "${REGION}", "awslogs-stream-prefix": "ecs", "awslogs-create-group": "true"}}
-            }]
-          }
-          EOF
-          done
+          export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          python3 ecs/generate.py
 
       - name: Register new task definitions and update ECS services
         env:
