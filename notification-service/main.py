@@ -9,7 +9,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from opentelemetry import trace
-from urllib.parse import unquote
 
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -47,9 +46,7 @@ class Notification(Base):
 
 provider = TracerProvider()
 otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://jaeger:4318")
-_raw_headers = os.getenv("OTEL_EXPORTER_OTLP_HEADERS", "")
-_headers = dict(unquote(pair).split("=", 1) for pair in _raw_headers.split(",") if "=" in pair)
-processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, headers=_headers))
+processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint))
 provider.add_span_processor(processor)
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer("notification-service")
