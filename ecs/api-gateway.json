@@ -1,0 +1,38 @@
+{
+  "family": "microblog-api-gateway",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "api-gateway",
+      "image": "IMAGE_PLACEHOLDER",
+      "essential": true,
+      "portMappings": [
+        {
+          "name": "api-gateway",
+          "containerPort": 8080,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        { "name": "USER_SERVICE_HOST",         "value": "user-service" },
+        { "name": "POST_SERVICE_HOST",         "value": "post-service" },
+        { "name": "COMMENT_SERVICE_HOST",      "value": "comment-service" },
+        { "name": "NOTIFICATION_SERVICE_HOST", "value": "notification-service" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group":         "/ecs/microblog-api-gateway",
+          "awslogs-region":        "<REGION>",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group":  "true"
+        }
+      }
+    }
+  ]
+}
