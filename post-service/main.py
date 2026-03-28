@@ -7,7 +7,9 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from urllib.parse import unquote
+
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -37,8 +39,10 @@ class Post(Base):
 
 
 provider = TracerProvider()
-otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://jaeger:4317")
-processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True))
+otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://jaeger:4318")
+_raw_headers = os.getenv("OTEL_EXPORTER_OTLP_HEADERS", "")
+_headers = dict(unquote(pair).split("=", 1) for pair in _raw_headers.split(",") if "=" in pair)
+processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, headers=_headers))
 provider.add_span_processor(processor)
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer("post-service")

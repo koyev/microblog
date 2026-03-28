@@ -36,24 +36,24 @@ jobs:
         run: |
           cat > user-service/.env <<EOF
           DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@user-db:5432/userdb
-          OTLP_ENDPOINT=http://jaeger:4317
+          OTLP_ENDPOINT=http://jaeger:4318
           EOF
 
           cat > post-service/.env <<EOF
           DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@post-db:5432/postdb
           RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-          OTLP_ENDPOINT=http://jaeger:4317
+          OTLP_ENDPOINT=http://jaeger:4318
           EOF
 
           cat > comment-service/.env <<EOF
           DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@comment-db:5432/commentdb
-          OTLP_ENDPOINT=http://jaeger:4317
+          OTLP_ENDPOINT=http://jaeger:4318
           EOF
 
           cat > notification-service/.env <<EOF
           DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@notification-db:5432/notificationdb
           RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-          OTLP_ENDPOINT=http://jaeger:4317
+          OTLP_ENDPOINT=http://jaeger:4318
           EOF
 
       - name: Build all images
@@ -84,3 +84,58 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down -v
+
+  deploy:
+    name: Deploy to AWS ECS
+    needs: integration-tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push images to ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          TAG: ${{ github.sha }}
+        run: |
+          for svc in api-gateway user-service post-service comment-service notification-service; do
+            docker build -t $REGISTRY/microblog/$svc:$TAG -t $REGISTRY/microblog/$svc:latest ./$svc
+            docker push $REGISTRY/microblog/$svc:$TAG
+            docker push $REGISTRY/microblog/$svc:latest
+          done
+
+      - name: Register new task definitions and update ECS services
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          TAG: ${{ github.sha }}
+          CLUSTER: microblog
+        run: |
+          for svc in api-gateway user-service post-service comment-service notification-service; do
+            IMAGE="$REGISTRY/microblog/$svc:$TAG"
+
+            TASK_DEF=$(sed "s|IMAGE_PLACEHOLDER|$IMAGE|g" ecs/$svc.json)
+
+            NEW_ARN=$(aws ecs register-task-definition \
+              --cli-input-json "$TASK_DEF" \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text)
+
+            aws ecs update-service \
+              --cluster $CLUSTER \
+              --service microblog-$svc \
+              --task-definition $NEW_ARN \
+              --output text
+
+            echo "Deployed microblog-$svc → $NEW_ARN"
+          done

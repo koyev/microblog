@@ -4,19 +4,19 @@ events {
 
 http {
     upstream user_service {
-        server user-service:8001;
+        server ${USER_SERVICE_HOST}:8001;
     }
 
     upstream post_service {
-        server post-service:8002;
+        server ${POST_SERVICE_HOST}:8002;
     }
 
     upstream comment_service {
-        server comment-service:8003;
+        server ${COMMENT_SERVICE_HOST}:8003;
     }
 
     upstream notification_service {
-        server notification-service:8004;
+        server ${NOTIFICATION_SERVICE_HOST}:8004;
     }
 
     server {
