@@ -14,24 +14,6 @@ DB_PASSWORD = os.environ["DB_PASSWORD"]
 RABBITMQ_URL = os.environ["RABBITMQ_URL"]
 
 EXECUTION_ROLE = f"arn:aws:iam::{ACCOUNT_ID}:role/ecsTaskExecutionRole"
-TASK_ROLE = f"arn:aws:iam::{ACCOUNT_ID}:role/ecsTaskRole"
-OTLP_ENDPOINT = "http://localhost:4318"
-
-ADOT_SIDECAR = {
-    "name": "aws-otel-collector",
-    "image": "public.ecr.aws/aws-observability/aws-otel-collector:latest",
-    "essential": False,
-    "command": ["--config=/etc/ecs/ecs-default-config.yaml"],
-    "logConfiguration": {
-        "logDriver": "awslogs",
-        "options": {
-            "awslogs-group": "/ecs/microblog-otel-collector",
-            "awslogs-region": REGION,
-            "awslogs-stream-prefix": "ecs",
-            "awslogs-create-group": "true",
-        },
-    },
-}
 
 
 def task_def(family, container_name, port, env_vars):
@@ -42,7 +24,6 @@ def task_def(family, container_name, port, env_vars):
         "cpu": "256",
         "memory": "512",
         "executionRoleArn": EXECUTION_ROLE,
-        "taskRoleArn": TASK_ROLE,
         "containerDefinitions": [
             {
                 "name": container_name,
@@ -69,7 +50,6 @@ def task_def(family, container_name, port, env_vars):
                     },
                 },
             },
-            ADOT_SIDECAR,
         ],
     }
 
@@ -90,7 +70,6 @@ SERVICES = {
         8001,
         {
             "DATABASE_URL": f"postgresql://postgres:{DB_PASSWORD}@{RDS_ENDPOINT}:5432/userdb?sslmode=require",
-            "OTLP_ENDPOINT": OTLP_ENDPOINT,
         },
     ),
     "post-service": (
@@ -99,7 +78,6 @@ SERVICES = {
         {
             "DATABASE_URL": f"postgresql://postgres:{DB_PASSWORD}@{RDS_ENDPOINT}:5432/postdb?sslmode=require",
             "RABBITMQ_URL": RABBITMQ_URL,
-            "OTLP_ENDPOINT": OTLP_ENDPOINT,
         },
     ),
     "comment-service": (
@@ -107,7 +85,6 @@ SERVICES = {
         8003,
         {
             "DATABASE_URL": f"postgresql://postgres:{DB_PASSWORD}@{RDS_ENDPOINT}:5432/commentdb?sslmode=require",
-            "OTLP_ENDPOINT": OTLP_ENDPOINT,
         },
     ),
     "notification-service": (
@@ -116,7 +93,6 @@ SERVICES = {
         {
             "DATABASE_URL": f"postgresql://postgres:{DB_PASSWORD}@{RDS_ENDPOINT}:5432/notificationdb?sslmode=require",
             "RABBITMQ_URL": RABBITMQ_URL,
-            "OTLP_ENDPOINT": OTLP_ENDPOINT,
         },
     ),
 }
