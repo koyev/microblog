@@ -3,8 +3,8 @@ events {
 }
 
 http {
-    # Use AWS VPC DNS resolver; resolve upstreams dynamically at request time
-    resolver 169.254.169.253 valid=10s ipv6=off;
+    # DNS resolver injected at startup from /etc/resolv.conf (works in Docker and ECS)
+    resolver ${DNS_RESOLVER} valid=10s ipv6=off;
 
     server {
         listen 8080;
