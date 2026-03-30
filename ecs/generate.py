@@ -14,6 +14,7 @@ DB_PASSWORD = os.environ["DB_PASSWORD"]
 RABBITMQ_URL = os.environ["RABBITMQ_URL"]
 
 EXECUTION_ROLE = f"arn:aws:iam::{ACCOUNT_ID}:role/ecsTaskExecutionRole"
+TASK_ROLE = f"arn:aws:iam::{ACCOUNT_ID}:role/ecsTaskRole"
 
 
 def task_def(family, container_name, port, env_vars):
@@ -24,6 +25,7 @@ def task_def(family, container_name, port, env_vars):
         "cpu": "256",
         "memory": "512",
         "executionRoleArn": EXECUTION_ROLE,
+        "taskRoleArn": TASK_ROLE,
         "containerDefinitions": [
             {
                 "name": container_name,

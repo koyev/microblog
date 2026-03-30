@@ -3,52 +3,44 @@ events {
 }
 
 http {
-    upstream user_service {
-        server ${USER_SERVICE_HOST}:8001;
-    }
-
-    upstream post_service {
-        server ${POST_SERVICE_HOST}:8002;
-    }
-
-    upstream comment_service {
-        server ${COMMENT_SERVICE_HOST}:8003;
-    }
-
-    upstream notification_service {
-        server ${NOTIFICATION_SERVICE_HOST}:8004;
-    }
+    # Use AWS VPC DNS resolver; resolve upstreams dynamically at request time
+    resolver 169.254.169.253 valid=10s ipv6=off;
 
     server {
         listen 8080;
         server_name localhost;
 
         location /users {
-            proxy_pass http://user_service;
+            set $upstream http://${USER_SERVICE_HOST}:8001;
+            proxy_pass $upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
         }
 
         location /posts {
-            proxy_pass http://post_service;
+            set $upstream http://${POST_SERVICE_HOST}:8002;
+            proxy_pass $upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
         }
 
         location /comments {
-            proxy_pass http://comment_service;
+            set $upstream http://${COMMENT_SERVICE_HOST}:8003;
+            proxy_pass $upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
         }
 
         location /notifications {
-            proxy_pass http://notification_service;
+            set $upstream http://${NOTIFICATION_SERVICE_HOST}:8004;
+            proxy_pass $upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
         }
 
         location /stream {
-            proxy_pass http://notification_service;
+            set $upstream http://${NOTIFICATION_SERVICE_HOST}:8004;
+            proxy_pass $upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header Connection "";
