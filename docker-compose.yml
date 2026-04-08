@@ -140,7 +140,8 @@ services:
     environment:
       API_URL: http://api-gateway:8080
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_started
 
   # ── API Gateway ─────────────────────────────────────────────────────────────
   api-gateway:
@@ -153,10 +154,14 @@ services:
       COMMENT_SERVICE_HOST: comment-service
       NOTIFICATION_SERVICE_HOST: notification-service
     depends_on:
-      - user-service
-      - post-service
-      - comment-service
-      - notification-service
+      user-service:
+        condition: service_healthy
+      post-service:
+        condition: service_healthy
+      comment-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
 
   # ── Monitoring ──────────────────────────────────────────────────────────────
   prometheus:
